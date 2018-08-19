@@ -1,0 +1,279 @@
+INCLUDE "hardware.inc"
+INCLUDE "ibmpc1.inc"
+INCLUDE "memory1.asm"
+INCLUDE "header.z80"
+
+; Music player vars
+Player_Initialize       equ     $4000
+Player_MusicStart       equ     $4003
+Player_MusicStop        equ     $4006
+Player_SongSelect       equ     $400c
+Player_MusicUpdate      equ     $4100
+Player_SampleUpdate     equ     $4000
+MusicBank               equ     2
+SampleBank              equ     3
+SongNumber              equ     0       ; 0 - 7
+; Sprite Variables
+Sprite_0_Y   EQU _OAMRAM
+Sprite_0_X   EQU _OAMRAM+1
+Sprite_0_Num EQU _OAMRAM+2
+Sprite_0_Att EQU _OAMRAM+3
+
+PlayerX equ _RAM    ; c000
+PlayerY equ _RAM+1
+
+SECTION "main code", ROM0[$0150]
+; $0150: Code!
+start:
+    nop
+    di
+    ld sp, $ffff
+    jp initialize
+
+TileData:
+	chr_IBMPC1	1,8 ; LOAD ENTIRE CHARACTER SET
+    ; macro enables rows 1 through 8 of data sets
+
+initialize:
+    ; set 4-color plaette and screen pos to 0,0
+    ld a, %11100100
+    ld [rBGP], a
+    ld [rOBP0],a ; sprite palette same
+
+    ld a, 0
+    ld [rSCX], a
+    ld [rSCY], a
+
+    call LCD_Off    ; disable LCD to write to _VRAM
+    ; copy tileset into _VRAM
+    ld	hl, TileData
+	ld	de, _VRAM		; $8000
+	ld	bc, 8*256 		; the ASCII character set: 256 characters, each with 8 bytes of display data
+	call	mem_CopyMono	; load tile data into _VRAM where generator is held
+
+;    ld hl, TileChar
+;    ld de, _VRAM
+;    ld b, 16
+;.load_loop:
+;    ld a, [hl]
+;    ld [de], a
+;    dec b
+;    jr z, .endloop
+;    inc hl
+;    inc de
+;    jr .load_loop
+;.endloop
+
+    ; sets _scrn0 indirectly to 0?
+    ;ld hl,_SCRN0    ; $9800
+    ;ld [hl], $00
+    
+    ; blank screen 32x32 with #32
+    ld	a, 32		; ASCII FOR BLANK SPACE
+	ld	hl, _SCRN0  ; load blank space into _SCRN0 ($9800)
+	ld	bc, SCRN_VX_B * SCRN_VY_B ; 32 * 32 x tiles by y tiles
+	call	mem_SetVRAM
+    ; copy text to screen
+    ld	hl,Title
+	ld	de, _SCRN0+3+(SCRN_VY_B*7) ; 9800+3+7*32
+	ld	bc, TitleEnd-Title
+	call	mem_CopyVRAM
+    ld hl,Title2
+    ld de, _SCRN0+3+(SCRN_VY_B*9)
+    ld bc, Title2End-Title2
+    call mem_CopyVRAM
+
+    ld a,30
+    ld [Sprite_0_Y],a
+    ld a,30
+    ld [Sprite_0_X],a
+    ld a,3
+    ld [Sprite_0_Num],a
+    ld a,0
+    ld [Sprite_0_Att],a
+
+    ;ld hl,_SCRN0
+    ;ld [hl], $03
+
+    ; turn back on LCD
+    ld a, LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
+    ld [rLCDC], a
+
+    ld a,1
+    ld [PlayerX],a
+    ld [PlayerY],a
+
+    ; initialize music
+FirstTime:
+        ld      a,MusicBank             ; Switch to MusicBank
+        ld      [rROMB0],a
+        call    Player_Initialize       ; Initialize sound registers and
+                                        ; player variables on startup
+NewSong:
+        ld      a,MusicBank             ; Switch to MusicBank
+        ld      [rROMB0],a
+        call    Player_MusicStart       ; Start music playing
+        ld      a,SongNumber            ; Call SongSelect AFTER MusicStart!
+        call    Player_SongSelect       ; (Not needed if SongNumber = 0)
+    ; default loop:
+FrameLoop:
+        ld      c,$08                   ; Waiting
+        call    WaitLCDLine
+        ld      a,MusicBank             ; Switch to MusicBank
+        ld      [rROMB0],a
+        call    Player_MusicUpdate      ; Call this once a frame
+; ---- Example of sample player timing (needed only if samples used) ---->
+        ld      c,$10                   ; Waiting
+        call    WaitLCDLine
+        ld      a,SampleBank            ; Switch to SampleBank
+        ld      [rROMB0],a
+        call    Player_SampleUpdate     ; 1st call right after music update
+        ; at least $24 LCD lines available for any routines here
+
+
+        ld      c,$10 + $26
+        call    WaitLCDLine
+        ld      a,SampleBank            ; Switch to SampleBank
+        ld      [rROMB0],a
+        call    Player_SampleUpdate     ; 2nd call after $26 LCD lines
+        ; at least $24 LCD lines available for any routines here
+
+
+        ld      c,$10 + $4d
+        call    WaitLCDLine
+        ld      a,SampleBank            ; Switch to SampleBank
+        ld      [rROMB0],a
+        call    Player_SampleUpdate     ; 3rd call after $4d LCD lines
+        ; at least $24 LCD lines available for any routines here
+
+
+        ld      c,$10 + $73             ; < $90, don't waste VBlank time
+        call    WaitLCDLine
+        ld      a,SampleBank            ; Switch to SampleBank
+        ld      [rROMB0],a
+        call    Player_SampleUpdate     ; 4th call after $73 LCD lines
+        ; a few more lines available for any routines here before VBlank
+
+
+; <---- Example of sample player timing (needed only if samples used) ----
+
+        ld      c,$90                   ; Wait for VBlank
+        call    WaitLCDLine
+        ; VBlank routines here
+        ld a,[Sprite_0_Y]
+        ld hl,PlayerY
+        add a, [hl]
+        ld hl,Sprite_0_Y
+        ld [hl], a
+        cp 152
+        jr z, .dec_y
+        cp 16
+        jr z,.inc_y
+        jr .end_y
+.dec_y:
+        ld a,-1
+        ld [PlayerY],a
+        jr .end_y
+.inc_y:
+        ld a,1
+        ld [PlayerY],a
+.end_y:
+        ld a,[Sprite_0_X]
+        ld hl,PlayerX
+        add a, [hl]
+        ld hl,Sprite_0_X
+        ld [hl], a
+        cp 160
+        jr z,.dec_x
+        cp 8
+        jr z,.inc_x
+        jr .end_x
+.dec_x:
+        ld a,-1
+        ld [PlayerX],a
+        jr .end_x
+.inc_x:
+        ld a,1
+        ld [PlayerX],a
+.end_x:
+        ;call slow
+
+        jp FrameLoop
+
+slow:
+        ld de,2000
+.delay:
+        dec de
+        ld a, d
+        or e
+        jr z,.fin_delay
+        nop
+        jr .delay
+.fin_delay
+        ret
+
+; If you don't want to worry about the player calls, set up a series of
+; rLY=rLYC interrupts, so that every interrupt sets the rLYC register to
+; wait for the next player call, and the last interrupt sets rLYC back to
+; the first line for looping.
+;
+; # rLY  CALL                   CPU usage (LCD lines)
+; 1 $08  Player_MusicUpdate     1-3
+; 2 $10  Player_SampleUpdate    0-1
+; 3 $36  Player_SampleUpdate    0-1
+; 4 $5d  Player_SampleUpdate    0-1
+; 5 $83  Player_SampleUpdate    0-1
+;(6 $90  Normal VBlank interrupt routines here if needed)
+
+StopExample:
+        ld      a,MusicBank             ; Switch to MusicBank
+        ld      [rROMB0],a
+        call    Player_MusicStop        ; Stops reading note data and cuts
+                                        ; all music notes currently playing
+    ret
+
+WaitLCDLine:
+        ld      a,[rLY]
+        cp      c
+        jr      nz,WaitLCDLine
+    ret
+
+LCD_Off:
+    ld a,[rLCDC] ; register LCD c
+    rlca        ; roll a left, b7>c
+    ret nc      ; ret if c off
+.VBlank_loop
+    ld a,[rLY]  ; ff44, lcd y
+    cp 145      ; at bottom?
+    jr nz, .VBlank_loop ; wait
+    ld a,[rLCDC]    ; load lcd reg
+    res 7,a         ; reset bit 7 (enabled bit) in a to 0
+    ld [rLCDC],a    ; return a to rLCDC
+    ret
+
+TileChar:
+    DB $7c,$7c,$82,$fe,$82,$d6,$82,$d6
+    DB $82, $FE, $82, $BA, $82, $C6, $7C, $7C
+EndTileChar:
+
+Title:
+	DB	"  what a pain"
+TitleEnd:
+
+Title2:
+    DB "in   the bu tt"
+Title2End:
+
+draw:
+stat:
+timer:
+serial:
+joypad:
+    reti
+
+SECTION "Music",DATA[$4000],BANK[MusicBank]
+    INCBIN "carillon.bin"              ; player code and music data
+SECTION "Samples",DATA[$4000],BANK[SampleBank]
+    INCBIN "carillon.sam"              ; needed only if samples used
+SECTION "Reserved",BSS[$c7c0]
+    ds      $30                     ; $c7c0 - $c7ef for player variables
