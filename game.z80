@@ -1,5 +1,5 @@
 INCLUDE "hardware.inc"
-INCLUDE "ibmpc1.inc"
+;INCLUDE "ibmpc1.inc"
 INCLUDE "memory1.asm"
 INCLUDE "header.z80"
 
@@ -9,99 +9,138 @@ Player_MusicStart       equ     $4003
 Player_MusicStop        equ     $4006
 Player_SongSelect       equ     $400c
 Player_MusicUpdate      equ     $4100
-Player_SampleUpdate     equ     $4000
-MusicBank               equ     2
-SampleBank              equ     3
+MusicBank               equ     1
 SongNumber              equ     0       ; 0 - 7
 ; Sprite Variables
-Sprite_0_Y   EQU _OAMRAM
-Sprite_0_X   EQU _OAMRAM+1
-Sprite_0_Num EQU _OAMRAM+2
-Sprite_0_Att EQU _OAMRAM+3
-
-PlayerX equ _RAM    ; c000
-PlayerY equ _RAM+1
+Sprite_0_Y      EQU _OAMRAM
+Sprite_0_X      EQU _OAMRAM+1
+Sprite_0_Num    EQU _OAMRAM+2
+Sprite_0_Att    EQU _OAMRAM+3
+playerSprite1_y      equ _OAMRAM+4
+playerSprite1_x      equ _OAMRAM+5
+playerSprite1        equ _OAMRAM+6
+playerSprite1Attr    equ _OAMRAM+7
+playerSprite2_y      equ _OAMRAM+8
+playerSprite2_x      equ _OAMRAM+9
+playerSprite2        equ _OAMRAM+10
+playerSprite2Attr    equ _OAMRAM+11
+playerSprite3_y      equ _OAMRAM+12
+playerSprite3_x      equ _OAMRAM+13
+playerSprite3        equ _OAMRAM+14
+playerSprite3Attr    equ _OAMRAM+15
+playerSprite4_y      equ _OAMRAM+16
+playerSprite4_x      equ _OAMRAM+17
+playerSprite4        equ _OAMRAM+18
+playerSprite4Attr    equ _OAMRAM+19
+; 6 = +24, 7 = +28; 8 = +32; 9 = +36; 10 = +40
+MoveX   equ     _RAM      ; $c000
+MoveY   equ     _RAM+1    ; + or -1 depends on border bounced
+joypadReg       equ _RAM+2
 
 SECTION "main code", ROM0[$0150]
+MAINCODESTART:
 ; $0150: Code!
 start:
     nop
     di
     ld sp, $ffff
-    jp initialize
-
-TileData:
-	chr_IBMPC1	1,8 ; LOAD ENTIRE CHARACTER SET
-    ; macro enables rows 1 through 8 of data sets
+    ;jp initialize
 
 initialize:
-    ; set 4-color plaette and screen pos to 0,0
-    ld a, %11100100
+    ; set 4-color plaette
+    ;ld a, %11 10 01 00 ; 3=w 2=dg 1=lg 0=blk
+    ld a, %00100111 
     ld [rBGP], a
+    ld [rOBP1], a
+    ; for sprite, this makes black (color 0) transparent
+    ld a, %11100100  ; invert transparency
     ld [rOBP0],a ; sprite palette same
-
+    ; viewport to 0,0
     ld a, 0
     ld [rSCX], a
     ld [rSCY], a
 
     call LCD_Off    ; disable LCD to write to _VRAM
-    ; copy tileset into _VRAM
-    ld	hl, TileData
-	ld	de, _VRAM		; $8000
-	ld	bc, 8*256 		; the ASCII character set: 256 characters, each with 8 bytes of display data
-	call	mem_CopyMono	; load tile data into _VRAM where generator is held
-
-;    ld hl, TileChar
-;    ld de, _VRAM
-;    ld b, 16
-;.load_loop:
-;    ld a, [hl]
-;    ld [de], a
-;    dec b
-;    jr z, .endloop
-;    inc hl
-;    inc de
-;    jr .load_loop
-;.endloop
-
-    ; sets _scrn0 indirectly to 0?
-    ;ld hl,_SCRN0    ; $9800
-    ;ld [hl], $00
+    ; copy tileset to vram
+    ld hl, TileChar
+    ld de, _VRAM
+    ld bc, EndTileChar-TileChar           ;16 bytes per 1 char, 2 chars.
+    call mem_Copy
     
-    ; blank screen 32x32 with #32
-    ld	a, 32		; ASCII FOR BLANK SPACE
+    ; blank screen 32x32 with blank
+    ld	a, 0		
 	ld	hl, _SCRN0  ; load blank space into _SCRN0 ($9800)
 	ld	bc, SCRN_VX_B * SCRN_VY_B ; 32 * 32 x tiles by y tiles
 	call	mem_SetVRAM
-    ; copy text to screen
-    ld	hl,Title
-	ld	de, _SCRN0+3+(SCRN_VY_B*7) ; 9800+3+7*32
-	ld	bc, TitleEnd-Title
-	call	mem_CopyVRAM
-    ld hl,Title2
-    ld de, _SCRN0+3+(SCRN_VY_B*9)
-    ld bc, Title2End-Title2
-    call mem_CopyVRAM
 
+    ; draw cloud test routine
+    ld a, 3
+    ld [_SCRN0+70], a
+    inc a 
+    ld [_SCRN0+71], a
+    inc a 
+    ld [_SCRN0+72], a
+    inc a
+    ld [_SCRN0+73], a
+    inc a 
+    ld [_SCRN0+74], a
+    ld a, 11
+    ld [_SCRN0+70+32], a
+    inc a 
+    ld [_SCRN0+71+32], a
+    inc a 
+    ld [_SCRN0+72+32], a
+    inc a 
+    ld [_SCRN0+73+32], a
+    inc a 
+    ld [_SCRN0+74+32], a
+    
+    
+    ; %x0000000 = priority, 1 = front window 0 = behind win, front bg
+    ; %0x000000 = y flip
+    ; %00x00000 = x flip
+    ; %000x0000 = palette number
+    ; %0000xxxx = unused
     ld a,30
     ld [Sprite_0_Y],a
     ld a,30
     ld [Sprite_0_X],a
-    ld a,3
+    ld a,1
     ld [Sprite_0_Num],a
-    ld a,0
+    ld a, %00010000
     ld [Sprite_0_Att],a
-
-    ;ld hl,_SCRN0
-    ;ld [hl], $03
+    ; Player sprite init
+    ld a,50
+    ld [playerSprite1_y], a
+    ld [playerSprite1_x], a
+    ld [playerSprite2_y], a
+    ld [playerSprite3_x], a
+    ld a,58
+    ld [playerSprite2_x], a
+    ld [playerSprite3_y], a
+    ld [playerSprite4_x], a
+    ld [playerSprite4_y], a
+    ld a, 8
+    ld [playerSprite1], a
+    ld a, 9
+    ld [playerSprite2], a
+    ld a, 8+8
+    ld [playerSprite3], a
+    ld a, 9+8
+    ld [playerSprite4], a
+    ld a, 0 
+    ld [playerSprite1Attr], a
+    ld [playerSprite2Attr], a
+    ld [playerSprite3Attr], a
+    ld [playerSprite4Attr], a  
 
     ; turn back on LCD
     ld a, LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
     ld [rLCDC], a
 
     ld a,1
-    ld [PlayerX],a
-    ld [PlayerY],a
+    ld [MoveX],a
+    ld [MoveY],a
 
     ; initialize music
 FirstTime:
@@ -117,106 +156,216 @@ NewSong:
         call    Player_SongSelect       ; (Not needed if SongNumber = 0)
     ; default loop:
 FrameLoop:
-        ld      c,$08                   ; Waiting
+        ld      c,$10                   ; Waiting
         call    WaitLCDLine
         ld      a,MusicBank             ; Switch to MusicBank
         ld      [rROMB0],a
         call    Player_MusicUpdate      ; Call this once a frame
-; ---- Example of sample player timing (needed only if samples used) ---->
-        ld      c,$10                   ; Waiting
-        call    WaitLCDLine
-        ld      a,SampleBank            ; Switch to SampleBank
-        ld      [rROMB0],a
-        call    Player_SampleUpdate     ; 1st call right after music update
-        ; at least $24 LCD lines available for any routines here
+        ; Non-VBlank Code:
+        ;
+        call    readJoypad
 
-
-        ld      c,$10 + $26
-        call    WaitLCDLine
-        ld      a,SampleBank            ; Switch to SampleBank
-        ld      [rROMB0],a
-        call    Player_SampleUpdate     ; 2nd call after $26 LCD lines
-        ; at least $24 LCD lines available for any routines here
-
-
-        ld      c,$10 + $4d
-        call    WaitLCDLine
-        ld      a,SampleBank            ; Switch to SampleBank
-        ld      [rROMB0],a
-        call    Player_SampleUpdate     ; 3rd call after $4d LCD lines
-        ; at least $24 LCD lines available for any routines here
-
-
-        ld      c,$10 + $73             ; < $90, don't waste VBlank time
-        call    WaitLCDLine
-        ld      a,SampleBank            ; Switch to SampleBank
-        ld      [rROMB0],a
-        call    Player_SampleUpdate     ; 4th call after $73 LCD lines
-        ; a few more lines available for any routines here before VBlank
-
-
-; <---- Example of sample player timing (needed only if samples used) ----
-
+        ;
         ld      c,$90                   ; Wait for VBlank
         call    WaitLCDLine
-        ; VBlank routines here
-        ld a,[Sprite_0_Y]
-        ld hl,PlayerY
-        add a, [hl]
-        ld hl,Sprite_0_Y
+        ; VBlank draw code:
+        ;
+        ; Update bullet positions
+        ld bc, 0
+firstBulletX        equ     _OAMRAM+(4*20)+1
+.bullet_loop:
+        ld hl, firstBulletX
+        ld a, [hl]
+        add a, 4
+        cp 168
+        jr nc, .destr_bullet
         ld [hl], a
-        cp 152
-        jr z, .dec_y
-        cp 16
-        jr z,.inc_y
-        jr .end_y
+        jr .end_bullet
+.destr_bullet:      ; sets pos to 0,0
+        ld a, 0
+        ld [hl], a
+        dec hl
+        ld [hl], a
+.end_bullet:
+        ld a, 5
+        add a, c ; 5 per loop, should be 05 00
+        ld c, a
+        cp 40
+        jr c, .end_bloop
+        add hl, bc 
+        jr .bullet_loop
+.end_bloop:
+        ; bulletSwapBuffer for intl'd bullets
+
+        ld a, [joypadReg]
+        and %00010000       ; right
+        call nz, movePlayerRight
+        ld a, [joypadReg]
+        and %00100000
+        call nz, movePlayerLeft
+        ld a, [joypadReg]
+        and %01000000
+        call nz, movePlayerUp
+        ld a, [joypadReg]
+        and %10000000
+        call nz, movePlayerDown
+        ld a, [joypadReg]
+        and %00000001
+        call nz, pressed_A
+
+        
+        ; stupid routine for bouncing char
+        ld a,[Sprite_0_Y]   ; load A w value IN $Sprite_0_Y
+        ld hl,MoveY         ; load hl w value of MoveY loc
+        add a, [hl]         ; add a, ($MoveY)
+        ld hl,Sprite_0_Y    ; load hl w loc Sprite_0_Y
+        ld [hl], a          ; load ($Sprite_0_Y) with sprite0_y+movey
+        cp 152              ; at edge of scr?
+        jr z, .dec_y        ; then dec y
+        cp 16               ; at left edge?
+        jr z,.inc_y         ; then inc y
+        jr .end_y           ; else end
 .dec_y:
-        ld a,-1
-        ld [PlayerY],a
-        jr .end_y
+        ld a,-1             ; a = -1
+        ld [MoveY],a        ; load ($movey) with -1
+        jr .end_y           ; end
 .inc_y:
-        ld a,1
-        ld [PlayerY],a
+        ld a,1              ; else a=1
+        ld [MoveY],a        ; end
 .end_y:
-        ld a,[Sprite_0_X]
-        ld hl,PlayerX
-        add a, [hl]
-        ld hl,Sprite_0_X
-        ld [hl], a
-        cp 160
-        jr z,.dec_x
-        cp 8
-        jr z,.inc_x
-        jr .end_x
+        ld a,[Sprite_0_X]   ; load a w value in sprite0x
+        ld hl,MoveX         ; hl = #movex
+        add a, [hl]         ; a+movex
+        ld hl,Sprite_0_X    ; hl = #sprite0x
+        ld [hl], a          ; sprite0x = a+movex
+        cp 160              ; right edge?
+        jr z,.dec_x         ; jmp dec x
+        cp 8                ; left edge?
+        jr z,.inc_x         ; jmp inc x
+        jr .end_x           ; end
 .dec_x:
-        ld a,-1
-        ld [PlayerX],a
+        ld a,-1             ; 
+        ld [MoveX],a        ; movex = -1
         jr .end_x
 .inc_x:
-        ld a,1
-        ld [PlayerX],a
+        ld a,1              ; movex = 1
+        ld [MoveX],a
 .end_x:
-        ;call slow
+        
+        jp FrameLoop        ; back to top
 
-        jp FrameLoop
+;   unused:
+;slow:
+;        ld de,2000
+;.delay:
+;        dec de
+;        ld a, d
+;        or e
+;        jr z,.fin_delay
+;        nop
+;        jr .delay
+;.fin_delay
+;        ret
+; ;;;;;;
 
-slow:
-        ld de,2000
-.delay:
-        dec de
-        ld a, d
-        or e
-        jr z,.fin_delay
-        nop
-        jr .delay
-.fin_delay
-        ret
+movePlayerRight:
+        ld a, [playerSprite2_x]
+        cp 160
+        ret z
+        inc a
+        ld [playerSprite2_x], a
+        ld [playerSprite4_x], a
+        sub a, 8
+        ld [playerSprite1_x], a
+        ld [playerSprite3_x], a
+    ret
+
+movePlayerLeft:
+        ld a, [playerSprite2_x]
+        cp 160
+        ret z
+        dec a
+        ld [playerSprite2_x], a
+        ld [playerSprite4_x], a
+        sub a, 8
+        ld [playerSprite1_x], a
+        ld [playerSprite3_x], a
+    ret
+
+movePlayerUp:
+        ld a, [playerSprite2_y]
+        cp 16
+        ret z
+        dec a
+        ld [playerSprite2_y], a
+        ld [playerSprite1_y], a
+        add a, 8
+        ld [playerSprite4_y], a
+        ld [playerSprite3_y], a
+    ret
+
+movePlayerDown:
+        ld a, [playerSprite2_y]
+        cp 160
+        ret z
+        inc a
+        ld [playerSprite2_y], a
+        ld [playerSprite1_y], a
+        add a, 8
+        ld [playerSprite4_y], a
+        ld [playerSprite3_y], a
+    ret
+
+pressed_A:
+        ; _OAMRAM + (4*20) = bullet 1
+pbullet1_y    equ     _OAMRAM+(4*20)
+
+        ld a, [playerSprite2_y]
+        add a, 4
+        ld [pbullet1_y], a
+        ld a, [playerSprite2_x]
+        add a, 8
+        ld [pbullet1_y+1], a
+        ld a, 2
+        ld [pbullet1_y+2], a
+        ld a, %00010000
+        ld [pbullet1_y+3], a
+    ret
+
+readJoypad:
+        ; read cross
+        ld a, %00100000
+        ld [rP1], a
+
+        ld a, [rP1]
+        ld a, [rP1]
+        ld a, [rP1]
+        ld a, [rP1]
+
+        and $0f     ; bottom 4 bits
+        swap a      ; swapped
+        ld b, a     ; store in b
+
+        ld a, %00010000     ; read buttons
+        ld [rP1], a
+
+        ld a, [rP1]
+        ld a, [rP1]
+        ld a, [rP1]
+        ld a, [rP1]     ; bounce ?
+
+        and $0f
+        or b            
+        
+        cpl     ; compliment
+        ld [joypadReg], a
+
+    ret
 
 ; If you don't want to worry about the player calls, set up a series of
 ; rLY=rLYC interrupts, so that every interrupt sets the rLYC register to
 ; wait for the next player call, and the last interrupt sets rLYC back to
 ; the first line for looping.
-;
 ; # rLY  CALL                   CPU usage (LCD lines)
 ; 1 $08  Player_MusicUpdate     1-3
 ; 2 $10  Player_SampleUpdate    0-1
@@ -230,39 +379,26 @@ StopExample:
         ld      [rROMB0],a
         call    Player_MusicStop        ; Stops reading note data and cuts
                                         ; all music notes currently playing
-    ret
+        ret
 
 WaitLCDLine:
         ld      a,[rLY]
         cp      c
-        jr      nz,WaitLCDLine
-    ret
+        jr      nz,WaitLCDLine          
+        ret
 
 LCD_Off:
-    ld a,[rLCDC] ; register LCD c
-    rlca        ; roll a left, b7>c
-    ret nc      ; ret if c off
+    ld a,[rLCDC]    ; register LCD c
+    rlca            ; roll a left, b7>c
+    ret nc          ; ret if c off
 .VBlank_loop
-    ld a,[rLY]  ; ff44, lcd y
-    cp 145      ; at bottom?
+    ld a,[rLY]      ; ff44, lcd y
+    cp 145          ; at bottom?
     jr nz, .VBlank_loop ; wait
     ld a,[rLCDC]    ; load lcd reg
     res 7,a         ; reset bit 7 (enabled bit) in a to 0
     ld [rLCDC],a    ; return a to rLCDC
     ret
-
-TileChar:
-    DB $7c,$7c,$82,$fe,$82,$d6,$82,$d6
-    DB $82, $FE, $82, $BA, $82, $C6, $7C, $7C
-EndTileChar:
-
-Title:
-	DB	"  what a pain"
-TitleEnd:
-
-Title2:
-    DB "in   the bu tt"
-Title2End:
 
 draw:
 stat:
@@ -271,9 +407,26 @@ serial:
 joypad:
     reti
 
+TileData:
+TileChar:
+INCLUDE "gbjamtiles.asm"
+EndTileChar:
+
+GraphicsBuffers:
+bulletSwapBuffer:
+    ds 80
+
+; ASSEMBLER OUTPUT
+MAINCODEEND:
+PRINTT "Main code size: "
+PRINTV MAINCODEEND-MAINCODESTART
+PRINTT "; Free space in bank 0: "
+PRINTV $3fff - $150 - (MAINCODEEND-MAINCODESTART)
+;
+
 SECTION "Music",DATA[$4000],BANK[MusicBank]
     INCBIN "carillon.bin"              ; player code and music data
-SECTION "Samples",DATA[$4000],BANK[SampleBank]
-    INCBIN "carillon.sam"              ; needed only if samples used
+;SECTION "Samples",DATA[$4000],BANK[SampleBank]
+;    INCBIN "carillon.sam"              ; needed only if samples used
 SECTION "Reserved",BSS[$c7c0]
     ds      $30                     ; $c7c0 - $c7ef for player variables

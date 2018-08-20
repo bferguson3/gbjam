@@ -37,6 +37,7 @@ chr_IBMPC1: MACRO
         PUSHO
 ; Define . and X to be 0 and 1
         OPT     b.X
+        OPT     g.oOX
 
 ; Characters $00 - $1f
 
