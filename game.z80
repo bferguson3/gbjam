@@ -32,14 +32,20 @@ playerSprite4_y      equ _OAMRAM+16
 playerSprite4_x      equ _OAMRAM+17
 playerSprite4        equ _OAMRAM+18
 playerSprite4Attr    equ _OAMRAM+19
+enemySprite1_y       equ _OAMRAM+20 ; (+4*4) for next 2x2 sprite
+enemySprite2_y       equ _OAMRAM+36
 ; 6 = +24, 7 = +28; 8 = +32; 9 = +36; 10 = +40
 MoveX   equ     _RAM      ; $c000
 MoveY   equ     _RAM+1    ; + or -1 depends on border bounced
 joypadReg       equ _RAM+2
+fireDelay   equ     _RAM+3
+playerBulletsOn equ _RAM+4
 
 SECTION "main code", ROM0[$0150]
+; Assembler input:
 MAINCODESTART:
 ; $0150: Code!
+
 start:
     nop
     di
@@ -73,28 +79,14 @@ initialize:
 	ld	bc, SCRN_VX_B * SCRN_VY_B ; 32 * 32 x tiles by y tiles
 	call	mem_SetVRAM
 
-    ; draw cloud test routine
-    ld a, 3
-    ld [_SCRN0+70], a
-    inc a 
-    ld [_SCRN0+71], a
-    inc a 
-    ld [_SCRN0+72], a
-    inc a
-    ld [_SCRN0+73], a
-    inc a 
-    ld [_SCRN0+74], a
-    ld a, 11
-    ld [_SCRN0+70+32], a
-    inc a 
-    ld [_SCRN0+71+32], a
-    inc a 
-    ld [_SCRN0+72+32], a
-    inc a 
-    ld [_SCRN0+73+32], a
-    inc a 
-    ld [_SCRN0+74+32], a
+    call DrawCloudTest
+    ; draw cloud test routine - copy to 9800, bgmap data 1
     
+    ; set vars
+    ld a, 5
+    ld [fireDelay], a
+    ld a, 0
+    ld [playerBulletsOn], a
     
     ; %x0000000 = priority, 1 = front window 0 = behind win, front bg
     ; %0x000000 = y flip
@@ -103,12 +95,13 @@ initialize:
     ; %0000xxxx = unused
     ld a,30
     ld [Sprite_0_Y],a
-    ld a,30
+    ld a,120
     ld [Sprite_0_X],a
     ld a,1
     ld [Sprite_0_Num],a
-    ld a, %00010000
+    ld a, 0
     ld [Sprite_0_Att],a
+    
     ; Player sprite init
     ld a,50
     ld [playerSprite1_y], a
@@ -124,9 +117,9 @@ initialize:
     ld [playerSprite1], a
     ld a, 9
     ld [playerSprite2], a
-    ld a, 8+8
+    ld a, 8+16
     ld [playerSprite3], a
-    ld a, 9+8
+    ld a, 9+16
     ld [playerSprite4], a
     ld a, 0 
     ld [playerSprite1Attr], a
@@ -134,8 +127,17 @@ initialize:
     ld [playerSprite3Attr], a
     ld [playerSprite4Attr], a  
 
+    ; enemy test
+    ld a, 1 
+    ld b, 1     ; enemy type: squid
+    ld c, 150   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld d, 30    ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
+    call SpawnEnemy_ABCD
+    
     ; turn back on LCD
-    ld a, LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
+    ;ld a, LCDCF_ON|LCDCF_BG8800|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
+    ; LCD on, window @9800, window off, bgtiles @8800, bg #1, 8x8, solidwinclr, BG on
+    ld a, %11000011
     ld [rLCDC], a
 
     ld a,1
@@ -163,22 +165,36 @@ FrameLoop:
         call    Player_MusicUpdate      ; Call this once a frame
         ; Non-VBlank Code:
         ;
-        call    readJoypad
+        ; FireDelay dec code
+        ld a, [fireDelay]
+        cp a,0 
+        jr z, .skipfd
+        dec a
+        ld [fireDelay], a
+.skipfd:
 
+        call    readJoypad
         ;
         ld      c,$90                   ; Wait for VBlank
         call    WaitLCDLine
         ; VBlank draw code:
         ;
         ; Update bullet positions
-        ld bc, 0
-firstBulletX        equ     _OAMRAM+(4*20)+1
-.bullet_loop:
+        ld a, [rSCX] 
+        inc a 
+        inc a 
+        inc a 
+        ld [rSCX], a 
+        ld a, [rSCY]
+        inc a 
+        ld [rSCY], a 
+
+firstBulletX        equ     _OAMRAM+(4*21)+1
         ld hl, firstBulletX
         ld a, [hl]
         add a, 4
-        cp 168
-        jr nc, .destr_bullet
+        cp a,200                ; a-200
+        jr nc, .destr_bullet    ; if no carry, destr bulet
         ld [hl], a
         jr .end_bullet
 .destr_bullet:      ; sets pos to 0,0
@@ -187,16 +203,38 @@ firstBulletX        equ     _OAMRAM+(4*20)+1
         dec hl
         ld [hl], a
 .end_bullet:
-        ld a, 5
-        add a, c ; 5 per loop, should be 05 00
-        ld c, a
-        cp 40
-        jr c, .end_bloop
-        add hl, bc 
-        jr .bullet_loop
-.end_bloop:
+
+        ld hl, firstBulletX+4
+        ld a, [hl] 
+        add a, 4 
+        cp a, 200 
+        jr nc, .destr_bullet2 
+        ld [hl], a 
+        jr .end_bullet2 
+.destr_bullet2:
+        ld a, 0 
+        ld [hl], a 
+        dec hl 
+        ld [hl], a 
+.end_bullet2:
+
+        ld hl, firstBulletX+8
+        ld a, [hl] 
+        add a, 4 
+        cp a, 200 
+        jr nc, .destr_bullet3
+        ld [hl], a 
+        jr .end_bullet3
+.destr_bullet3:
+        ld a, 0 
+        ld [hl], a 
+        dec hl 
+        ld [hl], a 
+.end_bullet3:
+       
         ; bulletSwapBuffer for intl'd bullets
 
+        ; Check joypad
         ld a, [joypadReg]
         and %00010000       ; right
         call nz, movePlayerRight
@@ -213,60 +251,48 @@ firstBulletX        equ     _OAMRAM+(4*20)+1
         and %00000001
         call nz, pressed_A
 
-        
-        ; stupid routine for bouncing char
-        ld a,[Sprite_0_Y]   ; load A w value IN $Sprite_0_Y
-        ld hl,MoveY         ; load hl w value of MoveY loc
-        add a, [hl]         ; add a, ($MoveY)
-        ld hl,Sprite_0_Y    ; load hl w loc Sprite_0_Y
-        ld [hl], a          ; load ($Sprite_0_Y) with sprite0_y+movey
-        cp 152              ; at edge of scr?
-        jr z, .dec_y        ; then dec y
-        cp 16               ; at left edge?
-        jr z,.inc_y         ; then inc y
-        jr .end_y           ; else end
-.dec_y:
-        ld a,-1             ; a = -1
-        ld [MoveY],a        ; load ($movey) with -1
-        jr .end_y           ; end
-.inc_y:
-        ld a,1              ; else a=1
-        ld [MoveY],a        ; end
-.end_y:
-        ld a,[Sprite_0_X]   ; load a w value in sprite0x
-        ld hl,MoveX         ; hl = #movex
-        add a, [hl]         ; a+movex
-        ld hl,Sprite_0_X    ; hl = #sprite0x
-        ld [hl], a          ; sprite0x = a+movex
-        cp 160              ; right edge?
-        jr z,.dec_x         ; jmp dec x
-        cp 8                ; left edge?
-        jr z,.inc_x         ; jmp inc x
-        jr .end_x           ; end
-.dec_x:
-        ld a,-1             ; 
-        ld [MoveX],a        ; movex = -1
-        jr .end_x
-.inc_x:
-        ld a,1              ; movex = 1
-        ld [MoveX],a
-.end_x:
-        
         jp FrameLoop        ; back to top
 
-;   unused:
-;slow:
-;        ld de,2000
-;.delay:
-;        dec de
-;        ld a, d
-;        or e
-;        jr z,.fin_delay
-;        nop
-;        jr .delay
-;.fin_delay
-;        ret
-; ;;;;;;
+;;;;;; END MAIN LOOP ;;;;;;;;;;
+
+
+; simple draw cloud
+DrawCloudTest:
+    ld a, 3
+    ld [_SCRN0+70], a
+    ld [_SCRN0+70+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+71], a
+    ld [_SCRN0+71+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+72], a
+    ld [_SCRN0+72+(32*8)-5], a
+    inc a
+    ld [_SCRN0+73], a
+    ld [_SCRN0+73+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+74], a
+    ld [_SCRN0+74+(32*8)-5], a
+    ld a, 3+16
+    ld [_SCRN0+70+32], a
+    ld [_SCRN0+70+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+71+32], a
+    ld [_SCRN0+71+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+72+32], a
+    ld [_SCRN0+72+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+73+32], a
+    ld [_SCRN0+73+(32*8)-5], a
+    inc a 
+    ld [_SCRN0+74+32], a
+    ld [_SCRN0+74+(32*8)-5], a
+ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PLAYER MOVEMENT ROUTINES
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 movePlayerRight:
         ld a, [playerSprite2_x]
@@ -282,7 +308,7 @@ movePlayerRight:
 
 movePlayerLeft:
         ld a, [playerSprite2_x]
-        cp 160
+        cp a,0
         ret z
         dec a
         ld [playerSprite2_x], a
@@ -316,21 +342,140 @@ movePlayerDown:
         ld [playerSprite3_y], a
     ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; BUTTON ROUTINES
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 pressed_A:
         ; _OAMRAM + (4*20) = bullet 1
-pbullet1_y    equ     _OAMRAM+(4*20)
+pbullet1_y        equ     _OAMRAM+(4*21)
+pbullet2_y        equ     _OAMRAM+(4*21)+4
+pbullet3_y        equ     _OAMRAM+(4*21)+8
 
+        ld a, [fireDelay]
+        cp 0 
+        jr nz, .end
+        
+        ld hl, pbullet1_y
+        ld a, [hl]
+        cp 16
+        jr c, .gobullet          ; if 16 > a, we can use bullet1
+        ld hl, pbullet2_y
+        ld a, [hl] 
+        cp 16 
+        jr c, .gobullet 
+        ld hl, pbullet3_y
+
+.gobullet:
+        ld a, 20
+        ld [fireDelay], a
+        
         ld a, [playerSprite2_y]
-        add a, 4
-        ld [pbullet1_y], a
+        add a, 5
+        ld [hl], a
         ld a, [playerSprite2_x]
-        add a, 8
-        ld [pbullet1_y+1], a
+        add a, 6
+        inc hl
+        ld [hl], a
         ld a, 2
-        ld [pbullet1_y+2], a
+        inc hl
+        ld [hl], a
         ld a, %00010000
-        ld [pbullet1_y+3], a
+        inc hl
+        ld [hl], a
+.end:
     ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; MOVE ENEMY ROUTINE
+;; decreases X for every enemy sprite
+;; OAMRAM+20 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SPAWN ENEMY ROUTINE
+;; b - enemy type. 1 = squid, 2=kniffish
+;; c - enemy x
+;; d - enemy y 
+;; A - enemy number (1-5)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;bsvar equ _RAM+99
+
+SpawnEnemy_ABCD:
+    ld hl, _OAMRAM+16;3        ; < OAM offset-4
+.addrLoop:
+    ld [$ff80], a 
+    ld a, b 
+    ld [$ff81], a           ; store num of* in ff80
+    ld a, c 
+    ld [$ff82], a 
+    ld a, [$ff80]
+
+    ld bc, 4 
+    add hl, bc 
+    dec a 
+    jr nz, .addrLoop
+    ld a, [$ff81]
+    ld b, a 
+    ld a, [$ff82]
+    ld c, a 
+
+.next:
+    ld a, b
+    cp 1
+    jr z, .drawSquid
+
+.drawSquid:
+    ld e, 48 
+.setPos:
+    ld a, d
+    ld [hl+], a ; 0 y
+    ld a, c
+    ld [hl+], a ; 1 x
+    ld a, e
+    ld [hl+], a 
+    ld a, 0 
+    ld [hl+], a 
+    ld a, d 
+    ld [hl+], a ; 4 
+    ld a, c 
+    add a, 8 
+    ld [hl+], a ; 5
+    ld a, e 
+    inc a 
+    ld e, a 
+    ld [hl+], a ; 6
+    ld a, 0 
+    ld [hl+], a ; 7 , palette
+    ld a, d 
+    add a, 8 
+    ld [hl+], a ; 8 
+    ld a, c 
+    ld [hl+], a ; 9 
+    ld a, e 
+    add a,15 
+    ld e, a 
+    ld [hl+], a 
+    ld a, 0 
+    ld [hl+], a ;11
+    ld a, d 
+    add a, 8 
+    ld [hl+], a ; 12
+    ld a, c 
+    add a, 8 
+    ld [hl+], a ; 13
+    ld a, e 
+    inc a 
+    ld e, a 
+    ld [hl+], a ; 14 
+    ld a, 0 
+    ld [hl+], a 
+
+    ;skip one
+ret
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Read Joypad Routine:
 
 readJoypad:
         ; read cross
@@ -387,6 +532,10 @@ WaitLCDLine:
         jr      nz,WaitLCDLine          
         ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Turn off LCD
+;; and wait for confirmation
+
 LCD_Off:
     ld a,[rLCDC]    ; register LCD c
     rlca            ; roll a left, b7>c
@@ -400,6 +549,8 @@ LCD_Off:
     ld [rLCDC],a    ; return a to rLCDC
     ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Interrupt vector info:
 draw:
 stat:
 timer:
@@ -407,26 +558,40 @@ serial:
 joypad:
     reti
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; DATA BLOCKS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 TileData:
 TileChar:
-INCLUDE "gbjamtiles.asm"
+INCLUDE "gbjamtiles8000.asm"
+INCLUDE "gbjamtiles9000.asm"
 EndTileChar:
-
+;BGChar:
+;INCLUDE
+;EndBGChar:
 GraphicsBuffers:
-bulletSwapBuffer:
-    ds 80
+;bulletSwapBuffer:
+;    ds 80
 
 ; ASSEMBLER OUTPUT
 MAINCODEEND:
+SECTION "Music",ROMX[$4000],BANK[MusicBank]
+MUSICSTART:
+    INCBIN "carillon.bin"              ; player code and music data
+MUSICEND:
+SECTION "Reserved",WRAM0[$c7c0]
+MUSICRESERVED:
+    ds      $30                     ; $c7c0 - $c7ef for player variables
+MUSICRESERVEDEND:
+
 PRINTT "Main code size: "
 PRINTV MAINCODEEND-MAINCODESTART
-PRINTT "; Free space in bank 0: "
+PRINTT "\nFree space in bank 0: "
 PRINTV $3fff - $150 - (MAINCODEEND-MAINCODESTART)
-;
+PRINTT "\n ** Bank 1 full of music! ** "
+PRINTT "\n"
+PRINTT "(Size of charset:)"
+PRINTV EndTileChar-TileChar
 
-SECTION "Music",DATA[$4000],BANK[MusicBank]
-    INCBIN "carillon.bin"              ; player code and music data
-;SECTION "Samples",DATA[$4000],BANK[SampleBank]
-;    INCBIN "carillon.sam"              ; needed only if samples used
-SECTION "Reserved",BSS[$c7c0]
-    ds      $30                     ; $c7c0 - $c7ef for player variables
