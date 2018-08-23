@@ -35,11 +35,12 @@ playerSprite4Attr    equ _OAMRAM+19
 enemySprite1_y       equ _OAMRAM+20 ; (+4*4) for next 2x2 sprite
 enemySprite2_y       equ _OAMRAM+36
 ; 6 = +24, 7 = +28; 8 = +32; 9 = +36; 10 = +40
-MoveX   equ     _RAM      ; $c000
-MoveY   equ     _RAM+1    ; + or -1 depends on border bounced
-joypadReg       equ _RAM+2
-fireDelay   equ     _RAM+3
-playerBulletsOn equ _RAM+4
+MoveX           equ     _RAM      ; $c000
+MoveY           equ     _RAM+1    ; + or -1 depends on border bounced
+joypadReg       equ     _RAM+2
+fireDelay       equ     _RAM+3
+playerBulletsOn     equ _RAM+4
+enemyPatternFireDelay   equ _RAM+5
 
 SECTION "main code", ROM0[$0150]
 ; Assembler input:
@@ -93,9 +94,9 @@ initialize:
     ; %00x00000 = x flip
     ; %000x0000 = palette number
     ; %0000xxxx = unused
-    ld a,30
+    ld a,0
     ld [Sprite_0_Y],a
-    ld a,120
+    ld a,0
     ld [Sprite_0_X],a
     ld a,1
     ld [Sprite_0_Num],a
@@ -127,12 +128,24 @@ initialize:
     ld [playerSprite3Attr], a
     ld [playerSprite4Attr], a  
 
-    ; enemy test
+    ; PATTERN ONE
     ld a, 1 
     ld b, 1     ; enemy type: squid
-    ld c, 150   ; x pos  (c, d) (c+8, d) 0 1  4, 5
-    ld d, 30    ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
+    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld d, 30   ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
     call SpawnEnemy_ABCD
+    ld a, 2
+    ld b, 1     ; enemy type: squid
+    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld d, 60   ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
+    call SpawnEnemy_ABCD
+    ld a, 3 
+    ld b, 1     ; enemy type: squid
+    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld d, 90    ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
+    call SpawnEnemy_ABCD
+    ld a, 120
+    ld [enemyPatternFireDelay], a 
     
     ; turn back on LCD
     ;ld a, LCDCF_ON|LCDCF_BG8800|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
@@ -179,17 +192,37 @@ FrameLoop:
         call    WaitLCDLine
         ; VBlank draw code:
         ;
-        ; Update bullet positions
+        ld hl, [enemyPatternFireDelay]
+        dec [hl]
+        jr nz, MoveEnemies
+        call FireEnemyBullets 
+        ; if nzero, jur to moveenemies
+        ; move enmies
+MoveEnemies:
+        ld hl, _OAMRAM+21
+        ld d, 20
+        ld bc, 4 
+.keepMoving:
+        dec [hl]
+        add hl, bc 
+        dec d 
+        jr nz, .keepMoving
+
+        ; background scrolling effect
         ld a, [rSCX] 
+        inc a 
         inc a 
         inc a 
         inc a 
         ld [rSCX], a 
         ld a, [rSCY]
         inc a 
+        inc a 
         ld [rSCY], a 
 
-firstBulletX        equ     _OAMRAM+(4*21)+1
+        
+; Update bullet positions
+firstBulletX        equ     _OAMRAM+(4*25)+1
         ld hl, firstBulletX
         ld a, [hl]
         add a, 4
@@ -255,39 +288,64 @@ firstBulletX        equ     _OAMRAM+(4*21)+1
 
 ;;;;;; END MAIN LOOP ;;;;;;;;;;
 
+FireEnemyBullets:
+        ; if e1.x < 160
+        ; spawn sprite 30-34 (vs 5 9 13 17 21)
+        
+    ret 
 
 ; simple draw cloud
 DrawCloudTest:
     ld a, 3
     ld [_SCRN0+70], a
-    ld [_SCRN0+70+(32*8)-5], a
+    ld [_SCRN0+70+(32*11)-5], a
+    ld [_SCRN0+70+(32*5)+12], a
+    ld [_SCRN0+600+(32*5)+12], a
     inc a 
     ld [_SCRN0+71], a
-    ld [_SCRN0+71+(32*8)-5], a
+    ld [_SCRN0+71+(32*11)-5], a
+    ld [_SCRN0+71+(32*5)+12], a
+    ld [_SCRN0+601+(32*5)+12], a
     inc a 
     ld [_SCRN0+72], a
-    ld [_SCRN0+72+(32*8)-5], a
+    ld [_SCRN0+72+(32*11)-5], a
+    ld [_SCRN0+72+(32*5)+12], a
+    ld [_SCRN0+602+(32*5)+12], a
     inc a
     ld [_SCRN0+73], a
-    ld [_SCRN0+73+(32*8)-5], a
+    ld [_SCRN0+73+(32*11)-5], a
+    ld [_SCRN0+73+(32*5)+12], a
+    ld [_SCRN0+603+(32*5)+12], a
     inc a 
     ld [_SCRN0+74], a
-    ld [_SCRN0+74+(32*8)-5], a
+    ld [_SCRN0+74+(32*11)-5], a
+    ld [_SCRN0+74+(32*5)+12], a
+    ld [_SCRN0+604+(32*5)+12], a
     ld a, 3+16
     ld [_SCRN0+70+32], a
-    ld [_SCRN0+70+(32*8)-5], a
+    ld [_SCRN0+70+(32*12)-5], a
+    ld [_SCRN0+70+(32*6)+12], a
+    ld [_SCRN0+601+(32*6)+12], a
     inc a 
     ld [_SCRN0+71+32], a
-    ld [_SCRN0+71+(32*8)-5], a
+    ld [_SCRN0+71+(32*12)-5], a
+    ld [_SCRN0+71+(32*6)+12], a
+    ld [_SCRN0+601+(32*6)+12], a
     inc a 
     ld [_SCRN0+72+32], a
-    ld [_SCRN0+72+(32*8)-5], a
+    ld [_SCRN0+72+(32*12)-5], a
+    ld [_SCRN0+72+(32*6)+12], a
+    ld [_SCRN0+602+(32*6)+12], a
     inc a 
     ld [_SCRN0+73+32], a
-    ld [_SCRN0+73+(32*8)-5], a
+    ld [_SCRN0+73+(32*12)-5], a
+    ld [_SCRN0+73+(32*6)+12], a
+    ld [_SCRN0+603+(32*6)+12], a
     inc a 
     ld [_SCRN0+74+32], a
-    ld [_SCRN0+74+(32*8)-5], a
+    ld [_SCRN0+74+(32*12)-5], a
+    ld [_SCRN0+74+(32*6)+12], a
+    ld [_SCRN0+604+(32*6)+12], a
 ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -348,9 +406,9 @@ movePlayerDown:
 
 pressed_A:
         ; _OAMRAM + (4*20) = bullet 1
-pbullet1_y        equ     _OAMRAM+(4*21)
-pbullet2_y        equ     _OAMRAM+(4*21)+4
-pbullet3_y        equ     _OAMRAM+(4*21)+8
+pbullet1_y        equ     _OAMRAM+(4*25)
+pbullet2_y        equ     _OAMRAM+(4*25)+4
+pbullet3_y        equ     _OAMRAM+(4*25)+8
 
         ld a, [fireDelay]
         cp 0 
@@ -389,7 +447,12 @@ pbullet3_y        equ     _OAMRAM+(4*21)+8
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; MOVE ENEMY ROUTINE
 ;; decreases X for every enemy sprite
-;; OAMRAM+20 
+;; _OAMRAM+20= e1y
+;; +21, 25, 29, 33
+;; 37, 41, 45, 49
+;; 53, 57, 61, 65
+;; 69, 73, 77, 81
+;; 85, 89, 93, 97 ; 20 loops
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; SPAWN ENEMY ROUTINE
@@ -401,16 +464,16 @@ pbullet3_y        equ     _OAMRAM+(4*21)+8
 ;bsvar equ _RAM+99
 
 SpawnEnemy_ABCD:
-    ld hl, _OAMRAM+16;3        ; < OAM offset-4
-.addrLoop:
-    ld [$ff80], a 
+    ld hl, _OAMRAM+4;3        ; < OAM offset-4
+    ld [$ff80], a ; enemy no
     ld a, b 
-    ld [$ff81], a           ; store num of* in ff80
+    ld [$ff81], a           ; enemy type
     ld a, c 
-    ld [$ff82], a 
+    ld [$ff82], a       ; enemy x
     ld a, [$ff80]
 
-    ld bc, 4 
+    ld bc, 16
+.addrLoop:
     add hl, bc 
     dec a 
     jr nz, .addrLoop
@@ -468,7 +531,7 @@ SpawnEnemy_ABCD:
     ld e, a 
     ld [hl+], a ; 14 
     ld a, 0 
-    ld [hl+], a 
+    ld [hl+], a ; 15
 
     ;skip one
 ret
