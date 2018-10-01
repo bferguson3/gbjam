@@ -1,0 +1,187 @@
+;   Hello Sprite GB
+; Josh Beard, 2018
+; github.com/jlbeard84
+; Adapted from https://gb-archive.github.io/salvage/tutorial_de_ensamblador/
+INCLUDE "hardware.inc"
+INCLUDE "header.z80"
+
+
+; sprite constants
+_SPR0_Y     EQU     _OAMRAM     ; sprite Y 0 is the beginning of sprite ram
+_SPR0_X     EQU     _OAMRAM+1   
+_SPR0_NUM   EQU     _OAMRAM+2
+_SPR0_ATT   EQU     _OAMRAM+3
+
+; create movement vars
+_MOVX       EQU     _RAM        ; start of ram
+_MOVY       EQU     _RAM+1      
+
+;SECTION "start", HOME[$0100]
+;    nop
+;    jp      appstart
+
+; rom header
+    ;ROM_HEADER  ROM_NOMBC, ROM_SIZE_32KBYTE, RAM_SIZE_0KBYTE
+SECTION "main code", ROM0[$0150]
+
+start:
+    nop
+    di                          ; disable interrupts
+    ld      sp, $ffff           ; top of ram
+
+init:
+    ld      a, %11100100        ; palette colors from darkest to lighter
+    ld      [rBGP], a
+    ld      [rOBP0], a
+
+    ld      a, 0                ; put 0 into rSCX, rSCY
+    ld      [rSCX], a
+    ld      [rSCY], a
+
+    call    lcd_off
+
+    ; load tiles into ram
+    ld      hl, Tiles
+    ld      de, _VRAM
+    ld      b, EndTiles-Tiles ; changed
+
+.loop_load:
+    ld      a, [hl]
+    ld      [de], a
+    dec     b
+    jr      z, .end_loop_load
+    inc     hl
+    inc     de
+    jr      .loop_load
+.end_loop_load:
+
+    ; clean screen with tile 0
+;    ld      hl, _SCRN0
+;    ld      de, 32*32
+;.loop_clean:
+;    ld      a, 0             ; load empty tile into a
+;    ld      [hl], a
+;    dec     de;;
+;
+;    ld      a, d
+;    or      e
+;    jp      z, .end_loop_clean
+;    inc     hl
+;    jp      .loop_load
+;.end_loop_clean
+
+    ; all map tiles filled with empty tile
+    ; create sprite
+
+    ld      a, 30
+    ld      [_SPR0_Y], a
+    ld      a, 30
+    ld      [_SPR0_X], a
+    ld      a, 1
+    ld      [_SPR0_NUM], a
+    ld      a, 0
+    ld      [_SPR0_ATT], a
+
+    ; config display
+    ld      a, LCDCF_ON|LCDCF_BG8000|LCDCF_BG9800|LCDCF_BGON|LCDCF_OBJ8|LCDCF_OBJON
+    ld      [rLCDC], a
+
+    ; prepare animation vars
+    ld      a, 1
+    ld      [_MOVX], a
+    ld      [_MOVY], a
+
+    ; infinite loop
+animation:
+    ; wait for vblank
+.wait
+    ld      a, [rLY]
+    cp      145
+    jr      nz, .wait
+    ; increment y
+    ld      a, [_SPR0_Y]        ; load current pos of sprite
+    ld      hl, _MOVY           ; hl in dir of y
+    add     a, [hl]
+    ld      hl, _SPR0_Y
+    ld      [hl], a
+    ; see if changed direction
+    cp      152
+    jr      z, .dec_y
+    cp      16
+    jr      z, .inc_y
+    ; do not change
+    jr      .end_y
+.dec_y:
+    ld      a, -1
+    ld      [_MOVY], a
+    jr      .end_y
+.inc_y:
+    ld      a, 1
+    ld      [_MOVY], a
+.end_y:
+    ld      a, [_SPR0_X]        ; load current x pos
+    ld      hl, _MOVX 
+    add     a, [hl]
+    ld      hl, _SPR0_X
+    ld      [hl], a
+    ; compare
+    cp      160
+    jr      z, .dec_x
+    cp      8
+    jr      z, .inc_x
+    ; do not change
+    jr      .end_x
+.dec_x:
+    ld      a, -1
+    ld      [_MOVX], a
+    jr      .end_x
+.inc_x:
+    ld      a, 1
+    ld      [_MOVX], a
+.end_x:
+    ; delay
+    ;call    delay
+    jr      animation
+
+; lcd shutdown
+lcd_off:
+    ld a,[rLCDC]    ; register LCD c
+    rlca            ; roll a left, b7>c
+    ret nc          ; ret if c off
+.VBlank_loop
+    ld a,[rLY]      ; ff44, lcd y
+    cp 145          ; at bottom?
+    jr nz, .VBlank_loop ; wait
+    ld a,[rLCDC]    ; load lcd reg
+    res 7,a         ; reset bit 7 (enabled bit) in a to 0
+    ld [rLCDC],a    ; return a to rLCDC
+    ret
+
+delay:
+    ld      de, 2000
+.run_delay:
+    dec     de
+    ld      a, d
+    or      e
+    jr      z, .end_run_delay
+    nop
+    jr      .run_delay
+.end_run_delay:
+    ret
+
+; tiles
+Tiles:
+    DB  $AA, $00, $44, $00, $AA, $00, $11, $00
+    DB  $AA, $00, $44, $00, $AA, $00, $11, $00
+    DB  $3E, $3E, $41, $7F, $41, $6B, $41, $7F
+    DB  $41, $63, $41, $7F, $3E, $3E, $00, $00
+EndTiles:
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Interrupt vector info:
+draw:
+stat:
+timer:
+serial:
+joypad:
+    reti

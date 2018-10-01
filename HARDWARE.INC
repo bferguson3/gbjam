@@ -45,6 +45,24 @@ _HRAM         EQU  $FF80 ; $FF80->$FFFE
 _OAMRAM       EQU  $FE00 ; $FE00->$FE9F
 _AUD3WAVERAM  EQU  $FF30 ; $FF30->$FF3F
 
+_SPR0_Y         equ _OAMRAM
+_SPR0_X         equ _OAMRAM+1
+_SPR0_N         equ _OAMRAM+2
+_SPR0_P         equ _OAMRAM+3
+_SPR1_Y         equ _OAMRAM+4
+_SPR1_X         equ _OAMRAM+5
+_SPR1_N         equ _OAMRAM+6
+_SPR1_P         equ _OAMRAM+7
+_SPR2_Y         equ _OAMRAM+8
+_SPR2_X         equ _OAMRAM+9
+_SPR2_N         equ _OAMRAM+10
+_SPR2_P         equ _OAMRAM+11
+_SPR3_Y         equ _OAMRAM+12
+_SPR3_X         equ _OAMRAM+13
+_SPR3_N         equ _OAMRAM+14
+_SPR3_P         equ _OAMRAM+15
+
+
 ; *** MBC5 Equates ***
 
 rRAMG         EQU  $0000 ; $0000->$1fff

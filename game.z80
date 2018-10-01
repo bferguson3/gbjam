@@ -41,6 +41,13 @@ joypadReg       equ     _RAM+2
 fireDelay       equ     _RAM+3
 playerBulletsOn     equ _RAM+4
 enemyPatternFireDelay   equ _RAM+5
+patternEnemyCount       equ _RAM+6
+nmeBulletXTraj          equ _RAM+7
+nmeBulletYTraj          equ _RAM+8
+nmeFlashCountdown       equ _RAM+9
+PRINTT "loc of enemyFireDelay var: "
+PRINTV enemyPatternFireDelay
+PRINTT "\n"
 
 SECTION "main code", ROM0[$0150]
 ; Assembler input:
@@ -94,14 +101,6 @@ initialize:
     ; %00x00000 = x flip
     ; %000x0000 = palette number
     ; %0000xxxx = unused
-    ld a,0
-    ld [Sprite_0_Y],a
-    ld a,0
-    ld [Sprite_0_X],a
-    ld a,1
-    ld [Sprite_0_Num],a
-    ld a, 0
-    ld [Sprite_0_Att],a
     
     ; Player sprite init
     ld a,50
@@ -129,22 +128,26 @@ initialize:
     ld [playerSprite4Attr], a  
 
     ; PATTERN ONE
+    ; 3 enemies total 
+    ld a, 4
+    ld [patternEnemyCount], a 
     ld a, 1 
     ld b, 1     ; enemy type: squid
-    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld c, 230   ; x pos  (c, d) (c+8, d) 0 1  4, 5
     ld d, 30   ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
     call SpawnEnemy_ABCD
     ld a, 2
     ld b, 1     ; enemy type: squid
-    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld c, 230   ; x pos  (c, d) (c+8, d) 0 1  4, 5
     ld d, 60   ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
     call SpawnEnemy_ABCD
     ld a, 3 
     ld b, 1     ; enemy type: squid
-    ld c, 100   ; x pos  (c, d) (c+8, d) 0 1  4, 5
+    ld c, 230   ; x pos  (c, d) (c+8, d) 0 1  4, 5
     ld d, 90    ; y pos  (c, d+8) (c+8, d+8) 8,9 12,13
     call SpawnEnemy_ABCD
-    ld a, 120
+    
+    ld a, 100
     ld [enemyPatternFireDelay], a 
     
     ; turn back on LCD
@@ -176,6 +179,7 @@ FrameLoop:
         ld      a,MusicBank             ; Switch to MusicBank
         ld      [rROMB0],a
         call    Player_MusicUpdate      ; Call this once a frame
+       
         ; Non-VBlank Code:
         ;
         ; FireDelay dec code
@@ -187,15 +191,50 @@ FrameLoop:
 .skipfd:
 
         call    readJoypad
-        ;
+        ; check 5, 9, 13, 30-35
+;        ld a, [_OAMRAM+(4*5)+1]
+;        cp 0 
+;        jr nz, .skipdelc
+;        ld a, 0 
+;        ld 
+;.skipdelc:
+
         ld      c,$90                   ; Wait for VBlank
         call    WaitLCDLine
-        ; VBlank draw code:
+    ; VBlank draw code:
         ;
-        ld hl, [enemyPatternFireDelay]
-        dec [hl]
+        ld a, [nmeFlashCountdown]
+        dec a 
+        ld [nmeFlashCountdown], a 
+        jr nz, .skipflash
+        ld a, %00000000
+        ;ld hl, _OAMRAM+(4*5)+3
+        ld [playerSprite1Attr], a 
+        ld [playerSprite1Attr+4], a 
+        ld [playerSprite1Attr+8], a 
+        ld [playerSprite1Attr+12], a
+        ld [_OAMRAM+(4*5)+3], a 
+        ld [_OAMRAM+(4*6)+3], a 
+        ld [_OAMRAM+(4*7)+3], a 
+        ld [_OAMRAM+(4*8)+3], a 
+        
+        ld [_OAMRAM+(4*9)+3], a 
+        ld [_OAMRAM+(4*10)+3], a 
+        ld [_OAMRAM+(4*11)+3], a 
+        ld [_OAMRAM+(4*12)+3], a 
+        
+        ld [_OAMRAM+(4*13)+3], a 
+        ld [_OAMRAM+(4*14)+3], a 
+        ld [_OAMRAM+(4*15)+3], a 
+        ld [_OAMRAM+(4*16)+3], a 
+.skipflash:
+        ld a, [enemyPatternFireDelay]
+        dec a 
+        ld [enemyPatternFireDelay], a 
         jr nz, MoveEnemies
         call FireEnemyBullets 
+        
+        
         ; if nzero, jur to moveenemies
         ; move enmies
 MoveEnemies:
@@ -203,11 +242,313 @@ MoveEnemies:
         ld d, 20
         ld bc, 4 
 .keepMoving:
+        ld a, 245 
+        cp a, [hl]
+        jr z, .endmovee
         dec [hl]
         add hl, bc 
         dec d 
         jr nz, .keepMoving
+.endmovee:
+; move enemy bullets
+        ; 30-34
+;        ld a, [nmeBulletXTraj]
+;        and %10000000
+;        jr z, .decreasex2
+;        ; inc x
+;        ld a, [nmeBulletXTraj] 
+;        and %01111111
+;        ld b, a ; now b has inc loop#
+;        ld hl, _OAMRAM+(30*4)+1
+;.incxloop:        
+;        inc [hl] 
+;        dec b 
+;        jr z, .checkY 
+;        jr .incxloop
+;.decreasex2:
+;        ld a, [nmeBulletXTraj] ; b has dec loop#
+;        ld b, a 
+;        ld hl, _OAMRAM+(30*4)+1
+;.decxloop:
+;        dec [hl]
+;        dec b 
+;        jr z, .checkY
+;        jr .decxloop
+;.checkY:
+;        ld a, [nmeBulletYTraj]
+;        and %10000000
+;        jr z, .decreasey2
+;        ld a, [nmeBulletYTraj]
+;        and %01111111
+;        ld b, a 
+;        ld hl, _OAMRAM+(30*4)
+;.incyloop:
+;        inc [hl]
+;        dec b 
+;        jr z, .endbcheck
+;        jr .incyloop
+;.decreasey2:
+;        ld a, [nmeBulletYTraj]
+;        ld b, a 
+;        ld hl, _OAMRAM+(30*4)
+;.decyloop:
+;        dec [hl] 
+;        dec b 
+;        jr z, .endbcheck
+;        jr .decyloop
+;.endbcheck:
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; check player bullet collision
+;; b - bullet number 1-3
+;; c - enemy number 1-3
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; check enemy bullet collision
+;; b - enemy b num 1-3 ; 30, 31, 32
+;; vs player
+;; b1 y+4 > py
+;; b1 y+4 < py+16 
+;; bx+4 > px 
+;; bx+4 < px+16
+CheckEBulletCollision:
+nmebullet_y1    equ _OAMRAM+(30*4)
+        ld a, [nmebullet_y1] ; b1 y 
+        add a, 4 
+        ld b, a 
+        ld a, [playerSprite1_y] ; if y
+        cp a, b ; if by+4 > py c, else nc 
+        jr nc, .miss 
+        ld a, [nmebullet_y1]
+        add a, 4 
+        ld b, a 
+        ld a, [playerSprite1_y] 
+        add a, 16 
+        cp a, b ; if by+4 > py+16, c else nc
+        jr c, .miss 
+        ld a, [nmebullet_y1+1]
+        add a, 4 
+        ld b, a 
+        ld a, [playerSprite1_x]
+        cp a, b ; x+4>px c, else nc 
+        jr nc, .miss 
+        ld a, [nmebullet_y1+1]
+        add a, 4 
+        ld b, a 
+        ld a, [playerSprite1_x]
+        add a, 16 
+        cp a, b 
+        jr c, .miss 
+        ;; Hit!
+        ld a, [playerSprite1Attr]
+        or %00010000
+        ld [playerSprite1Attr], a 
+        ld [playerSprite1Attr+4], a 
+        ld [playerSprite1Attr+8], a 
+        ld [playerSprite1Attr+12], a 
+        ld a, 5
+        ld [nmeFlashCountdown], a 
+.miss:
+
+CheckCollision:
+        ;x is bx1+4 > ex1?
+        ;x is bx1+4 < ex1+16?
+        ; is by1+4 > ey1? 
+        ; is by1+4 < ey1+16?
+        ld hl, _OAMRAM+(4*25)+1 ; bullet 1 x
+        ld a, 5 
+        ld [$ff80], a 
+        ld [$ff83], a 
+        ld de, _OAMRAM+(4*5)+1 ; enemy 1
+        ;ld d, 5 ; only loop 5 bullets
+.bullete1loop:
+        ld a, [hl] ; b1x
+        add a, 4    ; +4
+        ld b, a  
+        ld a, [de] ; en1x
+        cp a, b ; if e1x < b1x+4, c else nc
+        jr nc, .miss
+
+        ld a, [hl]
+        add a, 4 ; bx+4
+        ld b, a 
+        ld a, [de] ; ex1 
+        add a, 16 ; +16
+        cp a, b ; if bx+4 > y+16, c else nc
+        jr c, .miss 
+        dec de 
+        dec hl 
+        ld a, [hl] ; b1y
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        cp a, b ; if by+4 > ey, c else nc 
+        jr nc, .miss 
+
+        ld a, [hl]
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        add a, 16 ; +16
+        cp a, b ; if bx+4>y+16 c, else nc
+        jr c, .miss 
+        ; HIT!
+        ld a, 0 
+        ld [hl], a ; delete bullet
+        ld a, %00010000
+        ld [_OAMRAM+(4*5)+3], a 
+        ld [_OAMRAM+(4*6)+3], a 
+        ld [_OAMRAM+(4*7)+3], a 
+        ld [_OAMRAM+(4*8)+3], a 
+        ld a, 5
+        ld [nmeFlashCountdown], a 
+.miss:
+        ld bc, 4 
+        add hl, bc 
+        ld a, [$ff80]
+        dec a 
+        ld [$ff80], a  
+        jr nz, .bullete1loop
+        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+        ;;;;;;;;;;;;;;;
+CheckCollision2:
+        ld hl, _OAMRAM+(4*25)+1 ; bullet 1 x
+        ld a, 5 
+        ld [$ff80], a 
+        ld [$ff83], a 
+        ld de, _OAMRAM+(4*9)+1 ; enemy 1
+        ;ld d, 5 ; only loop 5 bullets
+.bullete1loop:
+        ld a, [hl] ; b1x
+        add a, 4    ; +4
+        ld b, a  
+        ld a, [de] ; en1x
+        cp a, b ; if e1x < b1x+4, c else nc
+        jr nc, .miss
+
+        ld a, [hl]
+        add a, 4 ; bx+4
+        ld b, a 
+        ld a, [de] ; ex1 
+        add a, 16 ; +16
+        cp a, b ; if bx+4 > y+16, c else nc
+        jr c, .miss 
+        dec de 
+        dec hl 
+        ld a, [hl] ; b1y
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        cp a, b ; if by+4 > ey, c else nc 
+        jr nc, .miss 
+
+        ld a, [hl]
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        add a, 16 ; +16
+        cp a, b ; if bx+4>y+16 c, else nc
+        jr c, .miss 
+        ; HIT!
+        ld a, 0 
+        ld [hl], a ; delete bullet
+        ld a, %00010000
+        ld [_OAMRAM+(4*9)+3], a 
+        ld [_OAMRAM+(4*10)+3], a 
+        ld [_OAMRAM+(4*11)+3], a 
+        ld [_OAMRAM+(4*12)+3], a 
+        ld a, 5
+        ld [nmeFlashCountdown], a 
+.miss:
+        ld bc, 4 
+        add hl, bc 
+        ld a, [$ff80]
+        dec a 
+        ld [$ff80], a  
+        jr nz, .bullete1loop
+CheckCollision3:
+        ld hl, _OAMRAM+(4*25)+1 ; bullet 1 x
+        ld a, 5 
+        ld [$ff80], a 
+        ld [$ff83], a 
+        ld de, _OAMRAM+(4*13)+1 ; enemy 1
+        ;ld d, 5 ; only loop 5 bullets
+.bullete1loop:
+        ld a, [hl] ; b1x
+        add a, 4    ; +4
+        ld b, a  
+        ld a, [de] ; en1x
+        cp a, b ; if e1x < b1x+4, c else nc
+        jr nc, .miss
+
+        ld a, [hl]
+        add a, 4 ; bx+4
+        ld b, a 
+        ld a, [de] ; ex1 
+        add a, 16 ; +16
+        cp a, b ; if bx+4 > y+16, c else nc
+        jr c, .miss 
+        dec de 
+        dec hl 
+        ld a, [hl] ; b1y
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        cp a, b ; if by+4 > ey, c else nc 
+        jr nc, .miss 
+
+        ld a, [hl]
+        add a, 4 ; +4
+        ld b, a ; to b
+        ld a, [de] ; ey1
+        add a, 16 ; +16
+        cp a, b ; if bx+4>y+16 c, else nc
+        jr c, .miss 
+        ; HIT!
+        ld a, 0 
+        ld [hl], a ; delete bullet
+        ld a, %00010000
+        ld [_OAMRAM+(4*13)+3], a 
+        ld [_OAMRAM+(4*14)+3], a 
+        ld [_OAMRAM+(4*15)+3], a 
+        ld [_OAMRAM+(4*16)+3], a 
+        ld a, 5
+        ld [nmeFlashCountdown], a 
+.miss:
+        ld bc, 4 
+        add hl, bc 
+        ld a, [$ff80]
+        dec a 
+        ld [$ff80], a  
+        jr nz, .bullete1loop
+
+
+; patternone bullet movement
+        ld hl, _OAMRAM+(30*4)
+        ;inc [hl] ; y- 
+        inc hl 
+        dec [hl] 
+        dec [hl] 
+        ld hl, _OAMRAM+(31*4)
+        ;inc [hl] 
+        inc hl 
+        dec [hl] 
+        dec [hl] 
+        ld hl, _OAMRAM+(32*4)
+        ;inc [hl] 
+        inc hl 
+        dec [hl] 
+        dec [hl] 
+        ld hl, _OAMRAM+(33*4)
+        ;inc [hl] 
+        inc hl 
+        dec [hl] 
+        dec [hl] 
+        ld hl, _OAMRAM+(34*4)
+        ;inc [hl] 
+        inc hl 
+        dec [hl] 
+        dec [hl] 
+       ; 
         ; background scrolling effect
         ld a, [rSCX] 
         inc a 
@@ -220,7 +561,6 @@ MoveEnemies:
         inc a 
         ld [rSCY], a 
 
-        
 ; Update bullet positions
 firstBulletX        equ     _OAMRAM+(4*25)+1
         ld hl, firstBulletX
@@ -265,6 +605,8 @@ firstBulletX        equ     _OAMRAM+(4*25)+1
         ld [hl], a 
 .end_bullet3:
        
+
+
         ; bulletSwapBuffer for intl'd bullets
 
         ; Check joypad
@@ -288,10 +630,119 @@ firstBulletX        equ     _OAMRAM+(4*25)+1
 
 ;;;;;; END MAIN LOOP ;;;;;;;;;;
 
-FireEnemyBullets:
-        ; if e1.x < 160
+FireEnemyBullets: ; A b [c] de hl
         ; spawn sprite 30-34 (vs 5 9 13 17 21)
+        ld hl, _OAMRAM+20
+        ld a, [hl]                  ; nme 1 y 
+        ld hl, _OAMRAM+120
+        ld [hl], a      ; store
+        ;ld hl, _OAMRAM+(4*5)
+        ld a, [_OAMRAM+21]
+        ld hl, _OAMRAM+121
+        ld [hl+], a ; store bulletx then inc
+        ld a, 1 
+        ld [hl+], a 
+        ld a, 0 
+        ld [hl], a
+
+        ld a, [patternEnemyCount]
+        cp 1 ; if 1 > a, c if 1 < a, nc
+        jr z, .stoploop
+
+        ld hl, _OAMRAM+36
+        ld a, [hl]
+        ld hl, _OAMRAM+124
+        ld [hl], a 
+        ld a, [_OAMRAM+37]
+        ld hl, _OAMRAM+125
+        ld [hl+], a 
+        ld a, 1 
+        ld [hl+], a 
+        ld a, 0 
+        ld [hl], a 
         
+        ld a, [patternEnemyCount]
+        cp 2 
+        jr z, .stoploop
+
+        ld hl, _OAMRAM+52 ; 20+(16*2)
+        ld a, [hl]
+        ld hl, _OAMRAM+128
+        ld [hl], a 
+        ld a, [_OAMRAM+53]
+        ld hl, _OAMRAM+129
+        ld [hl+], a 
+        ld a, 1 
+        ld [hl+], a 
+        ld a, 0 
+        ld [hl], a 
+
+        ld a, [patternEnemyCount]
+        cp 3 
+        jr z, .stoploop
+
+        ld hl, _OAMRAM+(20+(16*3))
+        ld a, [hl]
+        ld hl, _OAMRAM+120+(4*3)
+        ld [hl], a 
+        ld a, [_OAMRAM+(20+(16*3))+1]
+        ld hl, _OAMRAM+120+(4*3)+1
+        ld [hl+], a 
+        ld a, 1 
+        ld [hl+], a 
+        ld a, 0 
+        ld [hl], a 
+
+        ld a, [patternEnemyCount]
+        cp 4
+        jr z, .stoploop
+
+        ld hl, _OAMRAM+(20+(16*4))
+        ld a, [hl]
+        ld hl, _OAMRAM+120+(4*4)
+        ld [hl], a 
+        ld a, [_OAMRAM+(20+(16*4))+1]
+        ld hl, _OAMRAM+120+(4*4)+1
+        ld [hl+], a 
+        ld a, 1 
+        ld [hl+], a 
+        ld a, 0 
+        ld [hl], a 
+        
+.stoploop:
+        ; determine trajectory
+        ;ld a, [playerSprite1_x]
+        ;ld b, [enemySprite1_y+1]
+        ;cp a, b
+        ; if ex > px, c . if ex < px, nc
+;        ld a, [enemySprite1_y+1]
+;        ld b, a 
+;        ld a, [playerSprite1_x]
+;        sub a, b ; b > a = c, b < a = nc
+;        jr c, .decreaseX
+;        and a, %10000000 ; sets positive
+        ;inc x: a is px-ex but px is bigger so shoot right
+;.decreaseX:
+;        rrc a ; 120>60
+;        rrc a  ; >30
+;        rrc a  ; >15
+;        rrc a  ; >7 num 0-8
+;        rrc a
+;        ld [nmeBulletXTraj], a ; has enemy trajectory x w high bit set
+;        ld a, [enemySprite1_y]
+;        ld b, a 
+;        ld a, [playerSprite1_y]
+;        sub a, b 
+;        jr c, .decreaseY
+;        and a, %10000000
+;.decreaseY:
+;        rrc a
+;        rrc a
+;        rrc a 
+;        rrc a
+;        rrc a 
+;        ld [nmeBulletYTraj], a ; has en traj y w high bit set
+
     ret 
 
 ; simple draw cloud
