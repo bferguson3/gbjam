@@ -53,9 +53,9 @@ rev_Check_memory1_asm: MACRO
 ; Macro that pauses until VRAM available.
 
 lcd_WaitVRAM: MACRO
-        ldh     a,[rSTAT]       ; <---+
-        and     STATF_BUSY      ;     |
-        jr      nz,@-4          ; ----+
+        ldh     a,[rSTAT]       ; <---+ -2 ldh a,[$ff00+n8]
+        and     STATF_BUSY      ;     | -2
+        jr      nz,@-4          ; ----+ (-4 from >jr)
         ENDM
 
         SECTION "Memory1 Code",ROM0

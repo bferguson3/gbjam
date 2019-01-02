@@ -1,0 +1,34 @@
+; GBZ80 game template file
+; (c)2018 Ben Ferguson
+; gbtemplate.z80
+
+INCLUDE "hardware.inc"
+INCLUDE "gbheadertemplate.z80"
+
+SECTION "main code", ROM0[$0150]
+; template jump vector labels: draw, stat, timer, serial, joypad, start
+; don't use joypad interrupt, unreliable.
+start:
+    nop             ; pass
+    di              ; disable interrupts (during initialization?)
+    ld sp, $ffff    ; set stack pointer to $ffff, the top of the stack.
+
+    ; LCD on, window @9800, window off, bgtiles @8800, bg #1, 8x8, solidwinclr, BG on
+    ld a, %11000011
+    ld [rLCDC], a
+
+    ei              ; re-enable interrupts
+
+main: 
+    jp main 
+
+draw:               ; vblank interrupt
+    reti
+stat:               ; custom scanline interrupt
+    reti
+timer:              ; custom timer interrupt
+    reti
+serial:             ; serial link controller irq
+    reti
+joypad:             ; do not use
+    reti 
